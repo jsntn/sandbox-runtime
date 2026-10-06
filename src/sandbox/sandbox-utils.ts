@@ -778,8 +778,10 @@ export function generateProxyEnvVars(
   // lets the parent resolve them (e.g. Kubernetes *.svc.cluster.local).
   const noProxyAddresses = [
     'localhost',
-    '127.0.0.1',
-    '::1',
+    // '127.0.0.1' and '::1' intentionally excluded from NO_PROXY so that
+    // loopback targets route through the proxy, whose parent process dials
+    // the host's real loopback (sandboxed child has an empty netns).
+    // 'localhost' stays: it names the proxy itself, which must stay direct.
     '169.254.0.0/16', // Link-local
     '10.0.0.0/8', // Private network
     '172.16.0.0/12', // Private network
