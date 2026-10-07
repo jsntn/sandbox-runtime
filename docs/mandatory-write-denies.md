@@ -21,12 +21,16 @@ The rest of this document covers the static lists and `.git`.
 
 ## Always-blocked files
 
-`DANGEROUS_FILES` (`sandbox-utils.ts:12`), denied at their path in the
+`DANGEROUS_FILES` (`sandbox-utils.ts:17`), denied at their path in the
 working directory and at every nested occurrence:
 
 - `.gitconfig`, `.gitmodules`
-- `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`
-- `.ripgreprc`, `.mcp.json`
+- `.ripgreprc`
+
+Fork (my branch): the shell RC files (`.bashrc`, `.bash_profile`,
+`.zshrc`, `.zprofile`, `.profile`) and `.mcp.json` are not in this list.
+They are ordinary files, so they follow the normal write policy and are
+writable wherever `filesystem.allowWrite` covers them.
 
 ## Always-blocked directories
 
@@ -100,7 +104,7 @@ is no glob. Two layers:
    silent pass), and denies unreadable directories wholesale.
    `mandatoryDenySearchDepth` (1–10, default 3) bounds how far the scan
    goes. ripgrep lists *files* at the file's depth, so the effective reach
-   is: a dangerous *file* at or below the depth (`a/b/.bashrc` at depth 2),
+   is: a dangerous *file* at or below the depth (`a/b/.gitconfig` at depth 2),
    and a dangerous *directory* — including a repository's `hooks/` and
    `config` — one level higher up, because what the scan lists is the file
    inside it.
@@ -122,11 +126,12 @@ protected files behind. See README, "Pinned directories (Linux)".
 ## Example
 
 ```
-$ srt 'echo "malicious" >> .bashrc'
-/bin/bash: .bashrc: Operation not permitted
-
 $ srt 'echo "bad" > .git/hooks/pre-commit'
 /bin/bash: .git/hooks/pre-commit: Operation not permitted
+
+$ srt 'echo "bad" > .gitconfig'
+/bin/bash: .gitconfig: Operation not permitted
 ```
 
-Both with `allowWrite: ["."]` in force.
+Both with `allowWrite: ["."]` in force. A shell RC file or `.mcp.json` in
+the same writable directory is a normal file and writes to it succeed.

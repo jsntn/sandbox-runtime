@@ -41,7 +41,7 @@ import { isLinux, isSupportedPlatform } from '../helpers/platform.js'
 /**
  * Integration tests for mandatory deny paths.
  *
- * These tests verify that dangerous files (.bashrc, .gitconfig, etc.) and
+ * These tests verify that dangerous files (.gitconfig, etc.) and
  * directories (.git/hooks, .vscode, etc.) are blocked from writes even when
  * they're within an allowed write path.
  *
@@ -307,7 +307,10 @@ describe.if(isSupportedPlatform)(
         it(`blocks them all the same when ${file} holds ${line}`, async () => {
           writeFileSync(join(TEST_DIR, file), `${line}\n`)
           try {
-            for (const name of ['sub/.bashrc', 'sub/.git/hooks/pre-commit']) {
+            for (const name of [
+              'sub/.gitconfig',
+              'sub/.git/hooks/pre-commit',
+            ]) {
               const result = await runSandboxedWrite(name, MODIFIED_CONTENT)
 
               expect([name, result.success]).toEqual([name, false])
@@ -327,12 +330,14 @@ describe.if(isSupportedPlatform)(
           process.env.RIPGREP_CONFIG_PATH = configuration
           try {
             const result = await runSandboxedWrite(
-              'sub/.bashrc',
+              'sub/.gitconfig',
               MODIFIED_CONTENT,
             )
 
             expect(result.success).toBe(false)
-            expect(readFileSync('sub/.bashrc', 'utf8')).toBe(ORIGINAL_CONTENT)
+            expect(readFileSync('sub/.gitconfig', 'utf8')).toBe(
+              ORIGINAL_CONTENT,
+            )
           } finally {
             delete process.env.RIPGREP_CONFIG_PATH
             rmSync(configuration)
@@ -344,7 +349,7 @@ describe.if(isSupportedPlatform)(
         const unreadable = join(TEST_DIR, 'unreadable')
         mkdirSync(unreadable, { mode: 0o000 })
         try {
-          for (const name of ['sub/.bashrc', 'sub/.git/hooks/pre-commit']) {
+          for (const name of ['sub/.gitconfig', 'sub/.git/hooks/pre-commit']) {
             const result = await runSandboxedWrite(name, MODIFIED_CONTENT)
 
             expect([name, result.success]).toEqual([name, false])
@@ -369,7 +374,6 @@ describe.if(isSupportedPlatform)(
         for (const threads of [[], ['-j1']]) {
           it(`blocks them all the same in locked/ when ${directory} has mode ${mode.toString(8)} (rg ${threads.join()})`, async () => {
             const names = [
-              '.bashrc',
               '.git/config',
               '.git/hooks/pre-commit',
               `.claude/commands/${DIRECTORY_PROBE_FILE}`,
@@ -511,10 +515,10 @@ describe.if(isSupportedPlatform)(
         async () => {
           const project = join(TEST_DIR, 'above', '.idea', 'project')
           mkdirSync(join(project, 'sub'), { recursive: true })
-          writeFileSync(join(project, 'sub', '.bashrc'), ORIGINAL_CONTENT)
+          writeFileSync(join(project, 'sub', '.gitconfig'), ORIGINAL_CONTENT)
           process.chdir(project)
 
-          expect((await runSandboxedWrite('sub/.bashrc', 'x')).success).toBe(
+          expect((await runSandboxedWrite('sub/.gitconfig', 'x')).success).toBe(
             false,
           )
           expect((await runSandboxedWrite('safe-file.txt', 'x')).success).toBe(
@@ -598,7 +602,6 @@ describe.if(isSupportedPlatform)(
         )
       })
     })
-
     describe('allowGitConfig option', () => {
       async function runSandboxedWriteWithGitConfig(
         filePath: string,
@@ -1183,11 +1186,13 @@ describe.if(isSupportedPlatform)(
 
         it('does not leave ghost dotfiles after command + cleanup cycle', async () => {
           // This is the exact scenario from issue #85: running a sandboxed command
-          // should NOT leave .bashrc, .gitconfig, etc. in the working directory.
+          // should NOT leave .gitconfig, .vscode, etc. in the working
+          // directory.
           //
-          // The mandatory deny list includes paths like ~/.bashrc, ~/.gitconfig.
-          // When CWD is within an allowed write path and these dotfiles don't exist
-          // in CWD, the old code left empty mount point files behind.
+          // The mandatory deny list includes paths like ~/.gitconfig,
+          // .claude/commands, etc.
+          // When CWD is within an allowed write path and these paths do not
+          // exist in CWD, the old code left empty mount point files behind.
 
           // Use a clean subdirectory with no dotfiles
           const cleanDir = join(TEST_DIR, 'clean-subdir')

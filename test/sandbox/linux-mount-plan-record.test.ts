@@ -654,7 +654,7 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
       for (const idx of [rootBind, parentPin, cwdPin, cover]) {
         expect(idx).toBeGreaterThan(-1)
       }
-      expect(wrapped).toContain(` ${join(cwd, '.bashrc')}`)
+      expect(wrapped).toContain(` ${join(cwd, '.gitconfig')}`)
       // Read-only pins under one writable cover: a read-only cover would
       // make the whole top-level directory read-only.
       expect(wrapped).not.toContain(`--ro-bind ${top} ${top}`)
@@ -663,7 +663,7 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
       expect(cover).toBeGreaterThan(cwdPin)
       // The deny binds still land on top of the cover.
       expect(
-        wrapped.indexOf(`--ro-bind /dev/null ${join(cwd, '.bashrc')}`),
+        wrapped.indexOf(`--ro-bind /dev/null ${join(cwd, '.gitconfig')}`),
       ).toBeGreaterThan(cover)
     } finally {
       process.chdir(savedCwd)
@@ -687,7 +687,9 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
     // Two: the base root mount, then the deny bind that holds it read-only.
     expect(countMounts(wrapped, '--ro-bind', '/', '/')).toBe(2)
     expect(wrapped).toContain(`--tmpfs ${join(proj, 'hidden')} `)
-    expect(wrapped).not.toContain(`/dev/null ${join(process.cwd(), '.bashrc')}`)
+    expect(wrapped).not.toContain(
+      `/dev/null ${join(process.cwd(), '.gitconfig')}`,
+    )
     expect(wrapped).not.toContain(`--ro-bind ${process.cwd()} ${process.cwd()}`)
   })
 })

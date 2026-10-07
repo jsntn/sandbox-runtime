@@ -2275,7 +2275,7 @@ function updateConfig(newConfig: SandboxRuntimeConfig): void {
  * Lightweight cleanup to call after each sandboxed command completes.
  *
  * On Linux, bwrap creates empty files on the host filesystem as mount points
- * when protecting non-existent deny paths (e.g. ~/.bashrc, ~/.gitconfig).
+ * when protecting non-existent deny paths (e.g. ~/.gitconfig, ./.git/hooks).
  * These persist after bwrap exits. This function removes them.
  *
  * Safe to call on any platform — it's a no-op on macOS.

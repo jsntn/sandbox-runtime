@@ -1013,18 +1013,18 @@ describe.if(isLinux)('Deny binds under a read-only denied directory', () => {
     })
 
     it('binds the mandatory denies that exist and stubs the ones that do not', async () => {
-      const bashrc = join(BASE, '.bashrc')
+      const gitconfig = join(BASE, '.gitconfig')
       const hooks = join(BASE, '.git', 'hooks')
-      const mcp = join(BASE, '.mcp.json')
-      writeFileSync(bashrc, '')
+      const gitmodules = join(BASE, '.gitmodules')
+      writeFileSync(gitconfig, '')
       mkdirSync(hooks, { recursive: true })
 
       const command = await wrap([], [], ['/'])
 
-      expect(countMounts(command, '--ro-bind', bashrc, bashrc)).toBe(1)
+      expect(countMounts(command, '--ro-bind', gitconfig, gitconfig)).toBe(1)
       expect(countMounts(command, '--ro-bind', hooks, hooks)).toBe(1)
       // Absent: blocked from being created rather than bound read-only.
-      expect(countMounts(command, '--ro-bind', '/dev/null', mcp)).toBe(1)
+      expect(countMounts(command, '--ro-bind', '/dev/null', gitmodules)).toBe(1)
     })
 
     it('skips every per-path deny when "/" is denied whole, and keeps skipping them when "/" is vetoed', async () => {
@@ -1036,10 +1036,10 @@ describe.if(isLinux)('Deny binds under a read-only denied directory', () => {
       // after the allow's writable --bind / / is the whole protection.
       // readConfig is undefined rather than { denyOnly: [] } so the implicit
       // /etc/ssh/ssh_config.d deny cannot make the verdict host-dependent.
-      const bashrc = join(BASE, '.bashrc')
+      const gitconfig = join(BASE, '.gitconfig')
       const hooks = join(BASE, '.git', 'hooks')
-      const mcp = join(BASE, '.mcp.json')
-      writeFileSync(bashrc, '')
+      const gitmodules = join(BASE, '.gitmodules')
+      writeFileSync(gitconfig, '')
       mkdirSync(hooks, { recursive: true })
       const wrapRoot = (
         allowOnly: string[],
@@ -1060,11 +1060,13 @@ describe.if(isLinux)('Deny binds under a read-only denied directory', () => {
       expect(rootDeniedWhole.lastIndexOf('--ro-bind / /')).toBeGreaterThan(
         rootDeniedWhole.indexOf('--bind / /'),
       )
-      expect(countMounts(rootDeniedWhole, '--ro-bind', bashrc, bashrc)).toBe(0)
+      expect(
+        countMounts(rootDeniedWhole, '--ro-bind', gitconfig, gitconfig),
+      ).toBe(0)
       expect(countMounts(rootDeniedWhole, '--ro-bind', hooks, hooks)).toBe(0)
-      expect(countMounts(rootDeniedWhole, '--ro-bind', '/dev/null', mcp)).toBe(
-        0,
-      )
+      expect(
+        countMounts(rootDeniedWhole, '--ro-bind', '/dev/null', gitmodules),
+      ).toBe(0)
       expect(rootDeniedWhole).not.toContain('claude-empty-')
 
       // A second allow entry vetoes '/' — it lies strictly beneath it — and
@@ -1075,14 +1077,22 @@ describe.if(isLinux)('Deny binds under a read-only denied directory', () => {
       // cannot reach — one inside a predicted tmpfs, or a prediction that
       // could not be derived — which readonly-deny-dir-stubs.test.ts covers.
       const secondAllow = await wrapRoot(['/', AREA], undefined)
-      expect(countMounts(secondAllow, '--ro-bind', bashrc, bashrc)).toBe(0)
-      expect(countMounts(secondAllow, '--ro-bind', '/dev/null', mcp)).toBe(0)
+      expect(countMounts(secondAllow, '--ro-bind', gitconfig, gitconfig)).toBe(
+        0,
+      )
+      expect(
+        countMounts(secondAllow, '--ro-bind', '/dev/null', gitmodules),
+      ).toBe(0)
 
       const readDenied = join(BASE, 'ro')
       mkdirSync(readDenied)
       const oneReadDeny = await wrapRoot(['/'], { denyOnly: [readDenied] })
-      expect(countMounts(oneReadDeny, '--ro-bind', bashrc, bashrc)).toBe(0)
-      expect(countMounts(oneReadDeny, '--ro-bind', '/dev/null', mcp)).toBe(0)
+      expect(countMounts(oneReadDeny, '--ro-bind', gitconfig, gitconfig)).toBe(
+        0,
+      )
+      expect(
+        countMounts(oneReadDeny, '--ro-bind', '/dev/null', gitmodules),
+      ).toBe(0)
     })
 
     it.skipIf(!BWRAP_CAN_NAMESPACE)(

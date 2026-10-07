@@ -8,17 +8,16 @@ import type { FilesystemPathEntry } from './sandbox-config.js'
 /**
  * Dangerous files that should be protected from writes.
  * These files can be used for code execution or data exfiltration.
+ *
+ * Fork (my branch): shell RC files (.bashrc, .bash_profile, .zshrc,
+ * .zprofile, .profile) and .mcp.json are NOT in this list — they are
+ * ordinary files governed by the normal write policy, so
+ * `filesystem.allowWrite` covering them makes them writable.
  */
 export const DANGEROUS_FILES = [
   '.gitconfig',
   '.gitmodules',
-  '.bashrc',
-  '.bash_profile',
-  '.zshrc',
-  '.zprofile',
-  '.profile',
   '.ripgreprc',
-  '.mcp.json',
 ] as const
 
 /**

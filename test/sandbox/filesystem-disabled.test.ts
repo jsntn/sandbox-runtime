@@ -18,7 +18,7 @@ import { isSupportedPlatform } from '../helpers/platform.js'
  *
  * When true, no filesystem policy is enforced: every path is readable
  * and writable, denyRead/allowRead/allowWrite/denyWrite are ignored,
- * and the mandatory deny patterns (.git/hooks, .bashrc, etc.) are not
+ * and the mandatory deny patterns (.git/hooks, .gitconfig, etc.) are not
  * applied. Network/credential-env restrictions are unaffected.
  */
 describe.if(isSupportedPlatform)('filesystem.disabled', () => {

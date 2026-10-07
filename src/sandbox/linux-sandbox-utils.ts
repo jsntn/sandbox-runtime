@@ -1007,7 +1007,7 @@ function registerExitCleanupHandler(): void {
  * bwrap exits. This function removes them.
  *
  * This should be called after each sandboxed command completes to prevent
- * ghost dotfiles (e.g. .bashrc, .gitconfig) from appearing in the working
+ * ghost dotfiles (e.g. .gitconfig, .gitmodules) from appearing in the working
  * directory. It is also called automatically on process exit as a safety net.
  *
  * Each call decrements the active-sandbox counter that was incremented by
