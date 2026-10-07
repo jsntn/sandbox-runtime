@@ -636,8 +636,14 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
     const savedCwd = process.cwd()
     // An explicit two-deep tree: with the ambient cwd a direct child of '/'
     // (a checkout at /src, WORKDIR /app) the parent pin IS the cover.
-    const proj = tempTree({ 'work/proj/keep.txt': 'x' })
+    const proj = tempTree({
+      'work/proj/keep.txt': 'x',
+      'work/proj/.git/HEAD': 'ref: refs/heads/main',
+    })
     const cwd = join(proj, 'work', 'proj')
+    // tempTree already made `.git` a real directory (to hold the HEAD file),
+    // so the git cwd-deny fires. The hooks directory does not exist, so the
+    // deny is an absent path, stubbed with /dev/null.
     const top = `/${proj.split('/')[1]}`
     process.chdir(cwd)
     try {
@@ -654,7 +660,7 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
       for (const idx of [rootBind, parentPin, cwdPin, cover]) {
         expect(idx).toBeGreaterThan(-1)
       }
-      expect(wrapped).toContain(` ${join(cwd, '.gitconfig')}`)
+      expect(wrapped).toContain(` ${join(cwd, '.git', 'hooks')}`)
       // Read-only pins under one writable cover: a read-only cover would
       // make the whole top-level directory read-only.
       expect(wrapped).not.toContain(`--ro-bind ${top} ${top}`)
@@ -663,7 +669,7 @@ describe.if(isLinux)('Linux sandbox — mount-plan record and ordering', () => {
       expect(cover).toBeGreaterThan(cwdPin)
       // The deny binds still land on top of the cover.
       expect(
-        wrapped.indexOf(`--ro-bind /dev/null ${join(cwd, '.gitconfig')}`),
+        wrapped.indexOf(`--ro-bind /dev/null ${join(cwd, '.git', 'hooks')}`),
       ).toBeGreaterThan(cover)
     } finally {
       process.chdir(savedCwd)

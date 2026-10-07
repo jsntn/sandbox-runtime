@@ -65,6 +65,7 @@ describe.if(isLinux)('Symlinked deny paths (resolve-before-mask)', () => {
     DOTFILES = join(AREA, 'dotfiles')
     mkdirSync(join(DOTFILES, 'claude', 'commands'), { recursive: true })
     mkdirSync(join(DOTFILES, 'claude', 'agents'), { recursive: true })
+    mkdirSync(join(DOTFILES, 'git', 'hooks'), { recursive: true })
     mkdirSync(PROJ, { recursive: true })
   })
 
@@ -233,22 +234,23 @@ describe.if(isLinux)('Symlinked deny paths (resolve-before-mask)', () => {
     },
   )
 
-  it('resolves the mandatory .claude deny paths when cwd/.claude is a symlink', async () => {
-    const claudeLink = join(PROJ, '.claude')
-    symlinkSync(join('..', 'dotfiles', 'claude'), claudeLink)
+  it('resolves the mandatory .git deny path when cwd/.git is a symlink', async () => {
+    const gitLink = join(PROJ, '.git')
+    symlinkSync(join('..', 'dotfiles', 'git'), gitLink)
 
     const originalCwd = process.cwd()
     process.chdir(PROJ)
     try {
-      // No explicit denyWithinAllow: the mandatory deny paths (cwd-relative
-      // .claude/commands, .claude/agents, .mcp.json, ...) trigger the bug.
+      // No explicit denyWithinAllow: the mandatory git deny (cwd-relative
+      // .git/hooks, reached through the symlink) triggers the bug.
       const result = await wrap([])
 
-      expect(result).not.toContain(`--ro-bind /dev/null ${claudeLink}`)
-      for (const sub of ['commands', 'agents']) {
-        const resolved = join(DOTFILES, 'claude', sub)
-        expect(result).toContain(`--ro-bind ${resolved} ${resolved}`)
-      }
+      // No /dev/null bind onto the raw symlink path (bwrap aborts on those).
+      expect(result).not.toContain(`--ro-bind /dev/null ${gitLink}`)
+      // The mandatory deny .git/hooks is resolved through the symlink to the
+      // real target and self-bound there — the inode writes actually reach.
+      const resolved = join(DOTFILES, 'git', 'hooks')
+      expect(result).toContain(`--ro-bind ${resolved} ${resolved}`)
     } finally {
       process.chdir(originalCwd)
     }

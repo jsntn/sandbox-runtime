@@ -760,35 +760,28 @@ Filesystem restrictions are enforced at the OS level:
 - bubblewrap parses at most 9000 arguments (about 3000 mounts). A profile past that, or a command too long for one argument by itself, fails at wrap time with an error.
 - Every one of these wrap-time refusals is a `LinuxSandboxProfileError`, exported from the package root, with a `LinuxSandboxProfileErrorCode` on `.code` to tell the cases apart; branch on `.code` rather than on the message. They say the configuration expands to a profile this host cannot run, except `command_too_long` and `nul_in_path`, which also fire on what the embedding program passed in. A wrap that threw has already released what it held: do not call `cleanupAfterCommand()` for it, or a sandbox still running loses its mount points.
 
-### Mandatory Deny Paths (Auto-Protected Files)
+### Mandatory Write Denies (Git Protections)
 
-Certain sensitive files and directories are **always blocked from writes**, even if they fall within an allowed write path. This provides defense-in-depth against sandbox escapes and configuration tampering.
+The git hooks and config of a repository are **always blocked from writes**, even if they fall within an allowed write path. This provides defense-in-depth against sandbox escapes and configuration tampering.
 
 Full reference — including `.git`/`.git/HEAD`/worktree specifics, the ripgrep scan internals, and platform asymmetries: [`docs/mandatory-write-denies.md`](docs/mandatory-write-denies.md).
 
-**Always-blocked files:**
+- `.git/hooks/` — always blocked (prevents dropping in a hook that runs on a later `git` command)
+- `.git/config` — blocked unless `allowGitConfig: true` (prevents silently rewriting a repository's remotes, credentials or user)
 
-- Git config files: `.gitconfig`, `.gitmodules`
-- Other sensitive files: `.ripgreprc`
+Fork (my branch): these git protections are the only mandatory write denies left. Everything else — shell RC files (`.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`), `.mcp.json`, IDE directories (`.vscode/`, `.idea/`), `.claude/commands/`, `.claude/agents/`, `.gitconfig`, `.gitmodules`, `.ripgreprc` — is an ordinary file or directory, writable wherever `allowWrite` covers it.
 
-Fork (my branch): the shell RC files (`.bashrc`, `.bash_profile`,
-`.zshrc`, `.zprofile`, `.profile`) and `.mcp.json` are **not** in this
-list — they are ordinary files, writable wherever `allowWrite` covers them.
-
-**Always-blocked directories:**
-
-- IDE directories: `.vscode/`, `.idea/`
-- Claude config directories: `.claude/commands/`, `.claude/agents/`
-- Git hooks and config: `.git/hooks/`, `.git/config`
-
-These paths are blocked automatically - you don't need to add them to `denyWrite`. For example, even with `allowWrite: ["."]`, writing to `.gitconfig` or `.git/hooks/pre-commit` will fail:
+These paths are blocked automatically - you don't need to add them to `denyWrite`. For example, even with `allowWrite: ["."]`, writing to a hook will fail:
 
 ```bash
-$ srt 'echo "bad" > .gitconfig'
-/bin/bash: .gitconfig: Operation not permitted
-
 $ srt 'echo "bad" > .git/hooks/pre-commit'
 /bin/bash: .git/hooks/pre-commit: Operation not permitted
+```
+
+While a `.gitconfig` in the working directory is now an ordinary file, writable wherever `allowWrite` covers it:
+
+```bash
+$ srt 'echo x > .gitconfig'   # succeeds
 ```
 
 **Note (Linux):** A mandatory deny path that does not exist yet is blocked as well. bubblewrap covers it with a read-only `/dev/null`, or mounts an empty read-only directory at the first missing intermediate component, and those host mount points are removed by `cleanupAfterCommand()` — see "Write denies on paths that do not exist yet (Linux)" above. macOS uses glob patterns, which cover existing and new files alike.
@@ -799,7 +792,7 @@ With `allowWrite: ["/"]` the pins reach every ancestor, including any other allo
 
 A wrap that carries no write restrictions at all — `filesystem.disabled` with credential masks still in force, or a library caller passing no write config while a `denyRead` entry or a mask still seeds a pin — is the same shape: the whole tree is bound writable, so it gets the same pins and the same top-level covers, and the same `EXDEV` boundary applies there too.
 
-**Linux search depth:** On Linux, the sandbox uses `ripgrep` to scan for dangerous files in subdirectories within allowed write paths. By default, it searches up to 3 levels deep for performance: a dangerous file is found down to `a/b/.gitconfig`, and a dangerous directory, or the hooks and config of a repository, one level higher up (`a/.vscode`, `a/.claude/commands`, `a/.git/hooks`). Ignore files (`.gitignore`, `.ignore`) do not hide anything from it, and a directory of the user's own that it cannot read is denied whole. A dangerous directory other than a repository's hooks is only seen if it holds a file directly: below the working directory, one that is empty or does not exist yet can be filled. A repository that has no `hooks` directory has an empty file i…
+**Linux search depth:** On Linux, the sandbox uses `ripgrep` to scan for nested git repositories in subdirectories within allowed write paths. By default it searches up to 3 levels deep, which covers a repository whose `.git` directory sits one level below the working directory: ripgrep finds its `.git/HEAD` at `a/.git/HEAD` and denies `a/.git/hooks` and `a/.git/config`. A repository two levels down (`a/b/.git`) is beyond the default and is not denied - raise `mandatoryDenySearchDepth` to reach it. Ignore files (`.gitignore`, `.ignore`) do not hide anything from the scan, and a directory of the user's own that it cannot read is denied whole. A repository whose `.git` has no `hooks` directory yet still gets `a/.git/hooks` denied as a read-only stub, so a hook dropped in later is caught.
 
 ```json
 {

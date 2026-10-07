@@ -254,9 +254,9 @@ describe.if(isLinux)(
     const BWRAP_CAN_NAMESPACE = bwrapCanNamespace()
     let BASE: string
     let AREA: string // allowed write area
-    let PROJ: string // a project with no .claude/, so two mandatory denies
-    //                  (.claude/commands, .claude/agents) are absent under it
-    let DOT_CLAUDE: string // the destination both of them land on
+    let PROJ: string // a project with no .claude/
+    let DENIES: string[] // two explicit denies sharing that missing component
+    let DOT_CLAUDE: string // the destination both denies land on
 
     const savedCwd = process.cwd()
     const savedTmpdir = process.env.TMPDIR
@@ -269,6 +269,7 @@ describe.if(isLinux)(
       AREA = join(BASE, 'area')
       PROJ = join(AREA, 'proj')
       DOT_CLAUDE = join(PROJ, '.claude')
+      DENIES = [join(DOT_CLAUDE, 'commands'), join(DOT_CLAUDE, 'agents')]
       mkdirSync(PROJ, { recursive: true })
       process.chdir(PROJ)
       // The sources are minted under os.tmpdir(), which is read from the
@@ -288,7 +289,7 @@ describe.if(isLinux)(
     })
 
     async function wrap(
-      denyPaths: string[] = [],
+      denyPaths: string[] = DENIES,
       command = 'echo hello',
     ): Promise<string> {
       return wrapCommandWithSandboxLinux({
@@ -312,7 +313,7 @@ describe.if(isLinux)(
         command,
         needsNetworkRestriction: false,
         readConfig: { denyOnly: [] },
-        writeConfig: { allowOnly: [AREA, BASE], denyWithinAllow: [] },
+        writeConfig: { allowOnly: [AREA, BASE], denyWithinAllow: DENIES },
       })
     }
 
@@ -366,9 +367,9 @@ describe.if(isLinux)(
 
     it('emits one placeholder per destination, as a directory when the kinds collide', async () => {
       // denyWrite names the missing <cwd>/.claude itself, which asks for a
-      // /dev/null placeholder, while the mandatory <cwd>/.claude/commands asks
-      // for a directory at the same destination.
-      const command = await wrap([DOT_CLAUDE])
+      // /dev/null placeholder, while the explicit <cwd>/.claude/commands deny
+      // asks for a directory at the same destination.
+      const command = await wrap([DOT_CLAUDE, ...DENIES])
 
       const source = placeholderSourceAt(command, DOT_CLAUDE)
       expect(source).toBeDefined()
@@ -380,11 +381,14 @@ describe.if(isLinux)(
     })
 
     it.skipIf(!BWRAP_CAN_NAMESPACE)(
-      'starts the sandbox when a deny and a mandatory deny share one missing component',
+      'starts the sandbox when a deny and another deny share one missing component',
       async () => {
         // Two binds at one destination made bwrap refuse to start with
         // "Can't mkdir <dest>: Not a directory".
-        const started = run(await wrap([DOT_CLAUDE], `echo ${BOOTED}`), PROJ)
+        const started = run(
+          await wrap([DOT_CLAUDE, ...DENIES], `echo ${BOOTED}`),
+          PROJ,
+        )
         expect(started.stdout).not.toMatch(/Not a directory/)
         expect(started.status).toBe(0)
         expect(started.stdout).toContain(BOOTED)
@@ -396,7 +400,7 @@ describe.if(isLinux)(
         expect(existsSync(DOT_CLAUDE)).toBe(false)
 
         const denyCommand = await wrap(
-          [DOT_CLAUDE],
+          [DOT_CLAUDE, ...DENIES],
           `echo ${BOOTED}; mkdir -p ${join(DOT_CLAUDE, 'commands')}; echo rc=$?`,
         )
         const source = placeholderSourceAt(denyCommand, DOT_CLAUDE)
@@ -478,7 +482,7 @@ describe.if(isLinux)(
           `      command: 'true',`,
           `      needsNetworkRestriction: false,`,
           `      readConfig: { denyOnly: [] },`,
-          `      writeConfig: { allowOnly: [${JSON.stringify(AREA)}], denyWithinAllow: [] },`,
+          `      writeConfig: { allowOnly: [${JSON.stringify(AREA)}], denyWithinAllow: [${JSON.stringify(join(DOT_CLAUDE, 'commands'))}, ${JSON.stringify(join(DOT_CLAUDE, 'agents'))}] },`,
           `    }),`,
           `  )`,
           `}`,

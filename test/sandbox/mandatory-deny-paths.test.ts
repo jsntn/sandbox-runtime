@@ -41,9 +41,9 @@ import { isLinux, isSupportedPlatform } from '../helpers/platform.js'
 /**
  * Integration tests for mandatory deny paths.
  *
- * These tests verify that dangerous files (.gitconfig, etc.) and
- * directories (.git/hooks, .vscode, etc.) are blocked from writes even when
- * they're within an allowed write path.
+ * These tests verify that the git protections (.git/hooks, .git/config, and
+ * the same in nested repositories) are blocked from writes even when they're
+ * within an allowed write path. Every other file is ordinary.
  *
  * IMPORTANT: The mandatory deny patterns are relative to process.cwd().
  * Tests must chdir to TEST_DIR before generating sandbox commands.
@@ -100,7 +100,8 @@ describe.if(isSupportedPlatform)(
       )
       writeFileSync(join(TEST_DIR, '.git', 'index'), ORIGINAL_CONTENT)
 
-      // Create safe file within .claude that SHOULD be writable (not commands/agents)
+      // Create a safe file within .claude (a regular directory now)
+      mkdirSync(join(TEST_DIR, '.claude'), { recursive: true })
       writeFileSync(
         join(TEST_DIR, '.claude', 'some-other-file.txt'),
         ORIGINAL_CONTENT,
@@ -308,7 +309,7 @@ describe.if(isSupportedPlatform)(
           writeFileSync(join(TEST_DIR, file), `${line}\n`)
           try {
             for (const name of [
-              'sub/.gitconfig',
+              'sub/.git/config',
               'sub/.git/hooks/pre-commit',
             ]) {
               const result = await runSandboxedWrite(name, MODIFIED_CONTENT)
@@ -330,12 +331,12 @@ describe.if(isSupportedPlatform)(
           process.env.RIPGREP_CONFIG_PATH = configuration
           try {
             const result = await runSandboxedWrite(
-              'sub/.gitconfig',
+              'sub/.git/config',
               MODIFIED_CONTENT,
             )
 
             expect(result.success).toBe(false)
-            expect(readFileSync('sub/.gitconfig', 'utf8')).toBe(
+            expect(readFileSync('sub/.git/config', 'utf8')).toBe(
               ORIGINAL_CONTENT,
             )
           } finally {
@@ -349,7 +350,7 @@ describe.if(isSupportedPlatform)(
         const unreadable = join(TEST_DIR, 'unreadable')
         mkdirSync(unreadable, { mode: 0o000 })
         try {
-          for (const name of ['sub/.gitconfig', 'sub/.git/hooks/pre-commit']) {
+          for (const name of ['sub/.git/config', 'sub/.git/hooks/pre-commit']) {
             const result = await runSandboxedWrite(name, MODIFIED_CONTENT)
 
             expect([name, result.success]).toEqual([name, false])
@@ -363,8 +364,6 @@ describe.if(isSupportedPlatform)(
       for (const [directory, mode] of [
         ['locked', 0o000],
         ['locked/.git', 0o000],
-        // As deep as one of the names can itself lie.
-        ['locked/.claude/commands', 0o000],
         // Can be listed, and nothing in it looked at.
         ['locked', 0o444],
         // The other way about.
@@ -373,11 +372,7 @@ describe.if(isSupportedPlatform)(
         // With one thread, as on one CPU, ripgrep words what it says otherwise.
         for (const threads of [[], ['-j1']]) {
           it(`blocks them all the same in locked/ when ${directory} has mode ${mode.toString(8)} (rg ${threads.join()})`, async () => {
-            const names = [
-              '.git/config',
-              '.git/hooks/pre-commit',
-              `.claude/commands/${DIRECTORY_PROBE_FILE}`,
-            ]
+            const names = ['.git/config', '.git/hooks/pre-commit']
             populate('locked')
             try {
               for (const name of names) {
@@ -513,14 +508,17 @@ describe.if(isSupportedPlatform)(
       it.if(isLinux)(
         'takes no directory above the working directory for one of the names',
         async () => {
-          const project = join(TEST_DIR, 'above', '.idea', 'project')
-          mkdirSync(join(project, 'sub'), { recursive: true })
-          writeFileSync(join(project, 'sub', '.gitconfig'), ORIGINAL_CONTENT)
+          const project = join(TEST_DIR, 'above', 'nested', 'project')
+          mkdirSync(join(project, 'sub', '.git'), { recursive: true })
+          writeFileSync(
+            join(project, 'sub', '.git', 'config'),
+            ORIGINAL_CONTENT,
+          )
           process.chdir(project)
 
-          expect((await runSandboxedWrite('sub/.gitconfig', 'x')).success).toBe(
-            false,
-          )
+          expect(
+            (await runSandboxedWrite('sub/.git/config', 'x')).success,
+          ).toBe(false)
           expect((await runSandboxedWrite('safe-file.txt', 'x')).success).toBe(
             true,
           )
@@ -1185,14 +1183,13 @@ describe.if(isSupportedPlatform)(
         })
 
         it('does not leave ghost dotfiles after command + cleanup cycle', async () => {
-          // This is the exact scenario from issue #85: running a sandboxed command
-          // should NOT leave .gitconfig, .vscode, etc. in the working
-          // directory.
+          // This is the exact scenario from issue #85: running a sandboxed
+          // command should NOT leave ghost files in the working directory.
           //
-          // The mandatory deny list includes paths like ~/.gitconfig,
-          // .claude/commands, etc.
-          // When CWD is within an allowed write path and these paths do not
-          // exist in CWD, the old code left empty mount point files behind.
+          // The mandatory deny paths (the git protections, e.g.
+          // .git/hooks, .git/config) can land inside CWD. When CWD is within
+          // an allowed write path and these paths do not exist, the old code
+          // left empty mount point files behind.
 
           // Use a clean subdirectory with no dotfiles
           const cleanDir = join(TEST_DIR, 'clean-subdir')

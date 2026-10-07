@@ -422,7 +422,7 @@ async function linuxGetMandatoryDenyPaths(
   // Limit depth for performance - deeply nested dangerous files are rare
   // and the security benefit doesn't justify the traversal cost
   //
-  // ripgrep lists files, and its depth is the file's. `sub/.vscode/x` and
+  // ripgrep lists files, and its depth is the file's. `sub/.git/HEAD` and
   // `sub/.git/config` lie at `maxDepth`; `sub/.git/hooks/pre-commit`, of the
   // same directory, one level further down.
   let matches: string[] = []
@@ -1007,9 +1007,8 @@ function registerExitCleanupHandler(): void {
  * bwrap exits. This function removes them.
  *
  * This should be called after each sandboxed command completes to prevent
- * ghost dotfiles (e.g. .gitconfig, .gitmodules) from appearing in the working
+ * ghost files (e.g. .git/hooks, .git/config) from appearing in the working
  * directory. It is also called automatically on process exit as a safety net.
- *
  * Each call decrements the active-sandbox counter that was incremented by
  * wrapCommandWithSandboxLinux(). File deletion is deferred until the counter
  * reaches zero. Deleting a mount point file on the host while another bwrap
@@ -2707,8 +2706,8 @@ async function generateFilesystemArgs(
           // One mount point per destination. Deny paths are deduplicated on
           // the deny path, but a placeholder lands on the first MISSING
           // component, so two denies sharing one arrive here with a single
-          // destination — denyWrite '<cwd>/.claude' together with the
-          // mandatory '<cwd>/.claude/commands', in a project with no
+          // destination — a plain file deny on '<cwd>/.claude' together with a
+          // directory deny on '<cwd>/.claude/commands', in a project with no
           // `.claude/`. Two binds there make bwrap refuse to start when they
           // disagree about the destination's kind ("Can't mkdir <dest>: Not a
           // directory"). The directory form wins the disagreement: an empty

@@ -7,36 +7,35 @@ import type { FilesystemPathEntry } from './sandbox-config.js'
 
 /**
  * Dangerous files that should be protected from writes.
- * These files can be used for code execution or data exfiltration.
  *
- * Fork (my branch): shell RC files (.bashrc, .bash_profile, .zshrc,
- * .zprofile, .profile) and .mcp.json are NOT in this list — they are
- * ordinary files governed by the normal write policy, so
- * `filesystem.allowWrite` covering them makes them writable.
+ * Fork (my branch): intentionally empty. The upstream baseline protected
+ * `.gitconfig`, `.gitmodules`, the shell RC files and `.mcp.json` here; the
+ * fork removed all of them so they are ordinary files governed by
+ * `filesystem.allowWrite` like any other. The git protections below
+ * (`.git/hooks`, `.git/config` unless `allowGitConfig`, `.git/HEAD` for
+ * nested repositories) are built independently of this list.
  */
-export const DANGEROUS_FILES = [
-  '.gitconfig',
-  '.gitmodules',
-  '.ripgreprc',
-] as const
+export const DANGEROUS_FILES = [] as const
 
 /**
  * Dangerous directories that should be protected from writes.
- * These directories contain sensitive configuration or executable files.
+ *
+ * Fork (my branch): the only remaining entry is `.git`, which
+ * `getDangerousDirectories()` filters out — nothing here is protected.
+ * Upstream also blocked `.vscode` and `.idea`; the fork lifted that.
  */
-export const DANGEROUS_DIRECTORIES = ['.git', '.vscode', '.idea'] as const
+export const DANGEROUS_DIRECTORIES = ['.git'] as const
 
 /**
  * Get the list of dangerous directories to deny writes to.
  * Excludes .git since we need it writable for git operations -
  * instead we block specific paths within .git (hooks and config).
+ *
+ * Fork (my branch): returns nothing — the fork removed the `.vscode`,
+ * `.idea`, `.claude/commands` and `.claude/agents` protections.
  */
 export function getDangerousDirectories(): string[] {
-  return [
-    ...DANGEROUS_DIRECTORIES.filter(d => d !== '.git'),
-    '.claude/commands',
-    '.claude/agents',
-  ]
+  return []
 }
 
 /**

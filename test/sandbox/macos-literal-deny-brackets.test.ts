@@ -111,7 +111,7 @@ describe.if(!isWindows)(
 
     it('denies every cwd-joined dangerous path by subpath', () => {
       const profile = wrap(tree, 'true')
-      for (const name of ['.gitconfig', '.vscode', '.git/config']) {
+      for (const name of ['.git/hooks', '.git/config']) {
         expect(profile).toContain(
           `(subpath ${JSON.stringify(join(tree.work, name))})`,
         )
@@ -220,9 +220,9 @@ describe.if(!isWindows)(
         writeConfig: { allowOnly: [root], denyWithinAllow: [] },
       })
       expect(profile).toContain(
-        `(subpath ${JSON.stringify(join(work, '.gitconfig'))})`,
+        `(subpath ${JSON.stringify(join(work, '.git', 'hooks'))})`,
       )
-      const sibling = join(root, 'sZZt', '.gitconfig')
+      const sibling = join(root, 'sZZt', '.git', 'hooks')
       for (const regex of emittedRegexes(profile)) {
         expect(new RegExp(regex).test(sibling)).toBe(false)
       }

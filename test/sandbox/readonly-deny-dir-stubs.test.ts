@@ -28,7 +28,7 @@ import { withCapturedWarnings } from '../helpers/captured-warnings.js'
  * When denyWithinAllow covers a directory itself (e.g. the working
  * directory of a deliberately write-protected checkout), that directory is
  * re-bound read-only (--ro-bind <dir> <dir>). Every ABSENT deny path
- * beneath it — such as the mandatory dotfile denies (.gitconfig, .bashrc,
+ * beneath it — such as the mandatory git denies (.git/config,
  * …) when cwd has none — used to still get a creation-blocking stub
  * (--ro-bind /dev/null <path> or a read-only empty dir). bwrap applies
  * mounts in order and must creat()/mkdir the stub's mount point inside the
@@ -97,8 +97,8 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
   }
 
   it('skips stubs for absent mandatory-deny dotfiles inside a write-denied cwd', async () => {
-    // The real-world shape: cwd is write-denied, so the mandatory dotfile
-    // denies at cwd (.gitconfig, .bashrc, …) are all absent stub candidates.
+    // The real-world shape: cwd is write-denied, so the mandatory git
+    // deny at cwd (.git/config) is an absent stub candidate.
     process.chdir(PROJ)
 
     const command = await wrap([PROJ])
@@ -106,9 +106,9 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // The deny reached bwrap: cwd is re-bound read-only.
     const cwdReadOnlyBind = `--ro-bind ${PROJ} ${PROJ}`
     expect(command).toContain(cwdReadOnlyBind)
-    // The named symptom: no /dev/null stub at <cwd>/.gitconfig.
+    // The named symptom: no /dev/null stub at <cwd>/.git/config.
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
     // The invariant: no stub destination anywhere under the read-only
     // re-bound cwd — /dev/null file stubs and read-only empty-directory
@@ -131,28 +131,32 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     async () => {
       // The pre-fix symptom was a startup abort with no command executed.
       process.chdir(PROJ)
+      mkdirSync(join(PROJ, '.git'), { recursive: true })
       const booted = runIn(await wrap([PROJ]))
       expect(booted.stderr ?? '').not.toMatch(/Read-only file system/i)
       expect(booted.status).toBe(0)
       expect(booted.stdout).toContain('hello')
 
       const denied = runIn(
-        await wrap([PROJ], [], [AREA], `touch ${join(PROJ, '.gitconfig')}`),
+        await wrap([PROJ], [], [AREA], `touch ${join(PROJ, '.git', 'config')}`),
       )
       expect(denied.status).not.toBe(0)
-      expect(existsSync(join(PROJ, '.gitconfig'))).toBe(false)
+      expect(existsSync(join(PROJ, '.git', 'config'))).toBe(false)
     },
   )
 
   it('still stubs an absent mandatory-deny dotfile when the cwd remains writable (no over-broad skip)', async () => {
     // Control: without the covering denyWrite, cwd stays writable, so the
-    // stub is still required to block creating the dotfile.
+    // stub is still required to block creating the deny path.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
 
     const command = await wrap([])
 
     expect(command).toContain(`--bind ${AREA} ${AREA}`)
-    expect(command).toContain(`--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`)
+    expect(command).toContain(
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
+    )
   })
 
   it.skipIf(!BWRAP_CAN_NAMESPACE)(
@@ -184,14 +188,14 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // checkout is read-only in the sandbox and the absent dotfile denies need
     // no stub, which bubblewrap could not create inside that bind anyway.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const out = join(PROJ, 'out')
-    mkdirSync(out)
 
     const command = await wrap([PROJ], [], [AREA, out])
 
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
     // The nested allow is bound before the covering bind buries it, and
     // nothing re-binds it afterwards.
@@ -208,15 +212,15 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
       // — the covering bind buries it, which is what makes skipping the stub
       // sound — and the rest of the allowed area is still writable.
       process.chdir(PROJ)
+      mkdirSync(join(PROJ, '.git'), { recursive: true })
       const out = join(PROJ, 'out')
-      mkdirSync(out)
       const control = join(AREA, 'control.txt')
 
       const command = await wrap(
         [PROJ],
         [],
         [AREA, out],
-        `touch ${join(PROJ, '.gitconfig')} 2>/dev/null || echo NO-DOTFILE; ` +
+        `touch ${join(PROJ, '.git', 'config')} 2>/dev/null || echo NO-DOTFILE; ` +
           `touch ${join(out, 'x')} 2>/dev/null || echo NO-NESTED-ALLOW; ` +
           `touch ${control} 2>/dev/null && echo AREA-WRITABLE`,
       )
@@ -230,7 +234,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
       // A kept stub aborts bwrap here, before the command runs at all.
       expect(run.stderr ?? '').not.toMatch(/Read-only file system/i)
       expect(run.stdout).toBe('NO-DOTFILE\nNO-NESTED-ALLOW\nAREA-WRITABLE\n')
-      expect(existsSync(join(PROJ, '.gitconfig'))).toBe(false)
+      expect(existsSync(join(PROJ, '.git', 'config'))).toBe(false)
       expect(existsSync(join(out, 'x'))).toBe(false)
       expect(existsSync(control)).toBe(true)
     },
@@ -361,6 +365,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // of a write-denied checkout, as soon as a denyRead pattern such as
     // **/build/** matches a directory in it.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const readDenied = join(PROJ, 'secrets')
     mkdirSync(readDenied)
     writeFileSync(join(readDenied, 'token.txt'), 'x\n')
@@ -370,7 +375,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     const projBind = command.lastIndexOf(`--ro-bind ${PROJ} ${PROJ}`)
     expect(projBind).toBeGreaterThan(-1)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
     expect(command.lastIndexOf(`--tmpfs ${readDenied} `)).toBeGreaterThan(
       projBind,
@@ -383,6 +388,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
       // The runtime half of the skip above: the covering bind alone must keep
       // the absent dotfile uncreatable, and bwrap must still start.
       process.chdir(PROJ)
+      mkdirSync(join(PROJ, '.git'), { recursive: true })
       const readDenied = join(PROJ, 'secrets')
       mkdirSync(readDenied)
       writeFileSync(join(readDenied, 'token.txt'), 'x\n')
@@ -392,13 +398,13 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
           [PROJ],
           [readDenied],
           [AREA],
-          `echo BOOTED; touch ${join(PROJ, '.gitconfig')} || echo UNCREATABLE`,
+          `echo BOOTED; touch ${join(PROJ, '.git', 'config')} || echo UNCREATABLE`,
         ),
         { shell: true, encoding: 'utf8', timeout: 15000, cwd: PROJ },
       )
 
       expect(run.stdout).toBe('BOOTED\nUNCREATABLE\n')
-      expect(existsSync(join(PROJ, '.gitconfig'))).toBe(false)
+      expect(existsSync(join(PROJ, '.git', 'config'))).toBe(false)
     },
   )
 
@@ -416,7 +422,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
 
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -425,12 +431,13 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // loop: no tmpfs, no re-application, nothing to re-open — so it must
     // not veto the skip either.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
 
     const command = await wrap([PROJ], [join(PROJ, 'no-such-path')])
 
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -472,7 +479,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
 
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -521,12 +528,12 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // normalizePathForSandbox, so this is a non-regression check for that
     // whole class of comparison.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
 
     const command = await wrap([PROJ], [], [`${PROJ}/`])
-
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -589,7 +596,10 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
       // denied as well, its second read-only bind covers them and they are
       // not stubbed, because a stub's mount point cannot be created there.
       process.chdir(PROJ)
-      const dotfile = join(PROJ, '.gitconfig')
+      // .git a real directory so the git cwd-deny fires; .git/config does
+      // not exist, so it is the absent deny path the test's stub needs.
+      mkdirSync(join(PROJ, '.git'), { recursive: true })
+      const dotfile = join(PROJ, '.git', 'config')
 
       const probe = `echo hello; (echo x > ${dotfile}) 2>/dev/null && echo WROTE || echo REFUSED`
 
@@ -679,7 +689,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     })
 
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
     // Two whole triples: the base root mount, then the deny's read-only bind
     // that covers the dotfile.
@@ -703,7 +713,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     expect(command).toContain(`--bind ${AREA} ${AREA}`)
     expect(command.match(/--ro-bind \/ \/(?= )/g)).toHaveLength(2)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -714,7 +724,8 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
       // writable — not the absent cwd dotfile, and not the second allow
       // entry either.
       process.chdir(PROJ)
-      const dotfile = join(PROJ, '.gitconfig')
+      mkdirSync(join(PROJ, '.git'), { recursive: true })
+      const dotfile = join(PROJ, '.git', 'config')
       const inArea = join(AREA, 'probe.txt')
 
       const command = await wrapCommandWithSandboxLinux({
@@ -800,7 +811,8 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // failure as final keeps every placeholder, which is itself a start-up
     // refusal under a read-only covering deny. So the listing itself asks
     // once more, and only a second failure is taken for an answer.
-    const stub = `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
+    const stub = `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`
 
     const transient = await wrapWithFailingRootListings(1)
     expect(transient.failed).toBe(1)
@@ -854,7 +866,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // The control: a candidate outside that tmpfs is covered by the root's
     // own bind and needs neither.
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -864,7 +876,8 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // read-deny tmpfs keeps its placeholder — fail closed, at the cost the
     // unusable-prediction warning names.
     const rootDeniedWhole = { allowOnly: ['/'], denyWithinAllow: ['/'] }
-    const stub = `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
+    const stub = `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`
 
     const usable = await wrapWithFailingRootListings(0, rootDeniedWhole)
     expect(usable.command).not.toContain(stub)
@@ -936,6 +949,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // canonical location as a guess made the prediction unusable, which
     // vetoes every covering directory and stubs the absent cwd dotfiles on
     // the read-only cwd — every command on such a host aborts at startup.
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const { command, warnings, probeLookups } =
       await wrapWithUnresolvableRootChild('ENOENT')
 
@@ -945,7 +959,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     expect(warnings.join('\n')).not.toContain('Read-deny prediction unusable')
     expect(command).toContain(`--ro-bind ${PROJ} ${PROJ}`)
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -958,10 +972,11 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // an unusable prediction keeps them, because a prediction that failed is
     // no evidence about this directory at all.
     process.chdir(PROJ)
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const build = join(PROJ, 'pkg', 'build')
     mkdirSync(build, { recursive: true })
     writeFileSync(join(build, 'out.o'), '')
-    const stub = `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`
+    const stub = `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`
 
     const usable = await wrap([PROJ], [build])
     expect(countMounts(usable, '--tmpfs', build)).toBeGreaterThan(0)
@@ -995,6 +1010,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // one such failure would record a guess, make the prediction unusable
     // and stub the absent cwd dotfiles on a read-only cwd. EACCES, below,
     // is the settled case that must not be retried into a pass.
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const { command, warnings, probeLookups } =
       await wrapWithUnresolvableRootChild('EIO', 1)
 
@@ -1003,7 +1019,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     expect(probeLookups).toBe(SETTLED_PROBE_LOOKUPS + 1)
     expect(warnings.join('\n')).not.toContain('Read-deny prediction unusable')
     expect(command).not.toContain(
-      `--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`,
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
     )
   })
 
@@ -1011,6 +1027,7 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     // The other direction: a location that exists but cannot be resolved is
     // a guess about the prediction's own inputs, so the prediction is
     // unusable and every stub is kept.
+    mkdirSync(join(PROJ, '.git'), { recursive: true })
     const { command, warnings, probeLookups } =
       await wrapWithUnresolvableRootChild('EACCES')
 
@@ -1019,6 +1036,8 @@ describe.if(isLinux)('Deny stubs under a read-only denied directory', () => {
     expect(probeLookups).toBe(SETTLED_PROBE_LOOKUPS)
     expect(warnings.join('\n')).toContain('Read-deny prediction unusable')
     expect(warnings.join('\n')).toContain('/srt-unresolvable-probe')
-    expect(command).toContain(`--ro-bind /dev/null ${join(PROJ, '.gitconfig')}`)
+    expect(command).toContain(
+      `--ro-bind /dev/null ${join(PROJ, '.git', 'config')}`,
+    )
   })
 })
