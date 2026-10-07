@@ -937,6 +937,16 @@ export const FilesystemConfigSchema = z.object({
     .describe(
       'Allow writes to .git/config files (default: false). Enables git remote URL updates while keeping .git/hooks protected.',
     ),
+  allowShellRC: z
+    .boolean()
+    .optional()
+    .describe(
+      'Allow writes to shell RC files (.bashrc, .bash_profile, .zshrc, .zprofile, .profile) (default: false).',
+    ),
+  allowMCPConfig: z
+    .boolean()
+    .optional()
+    .describe('Allow writes to .mcp.json (default: false).'),
 })
 
 /**

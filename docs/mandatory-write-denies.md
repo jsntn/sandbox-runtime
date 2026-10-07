@@ -12,7 +12,9 @@ and the per-platform builders — `linuxGetCwdMandatoryDenyPaths` /
 Two distinct mechanisms make up the deny set:
 
 - **Always-blocked names** — the static lists below, applied at the working
-  directory and (within search depth) at every nested occurrence.
+  directory and (within search depth) at every nested occurrence. Shell RC
+  files and `.mcp.json` can be lifted by `filesystem.allowShellRC` and
+  `filesystem.allowMCPConfig` respectively (both default false).
 - **Git protections** — `.git/hooks` (always), `.git/config` (unless
   `filesystem.allowGitConfig: true`), and `.git/HEAD` (Linux nested repos
   only; see [`.git/HEAD`](#githead)).
@@ -26,7 +28,14 @@ working directory and at every nested occurrence:
 
 - `.gitconfig`, `.gitmodules`
 - `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`
-- `.ripgreprc`, `.mcp.json`
+  (unless `filesystem.allowShellRC: true`)
+- `.ripgreprc`, `.mcp.json` (`.mcp.json` unless
+  `filesystem.allowMCPConfig: true`)
+
+The lifted sets are named `SHELL_RC_FILES` and `MCP_CONFIG_FILE`
+(`sandbox-utils.ts`); `getDangerousFiles(allowShellRC, allowMCPConfig)`
+computes what remains denied and is the single source both platform
+builders use, so the two flags cannot drift between macOS and Linux.
 
 ## Always-blocked directories
 

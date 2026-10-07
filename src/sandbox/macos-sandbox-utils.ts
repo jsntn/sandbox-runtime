@@ -15,7 +15,7 @@ import {
   globToRegex,
   denyGlobRegex,
   isStrictlyUnder as isPathStrictlyUnder,
-  DANGEROUS_FILES,
+  getDangerousFiles,
   getDangerousDirectories,
 } from './sandbox-utils.js'
 import { shouldIgnoreViolation } from './sandbox-violation-store.js'
@@ -73,6 +73,10 @@ export interface MacOSSandboxParams {
   ignoreViolations?: IgnoreViolationsConfig | undefined
   allowPty?: boolean
   allowGitConfig?: boolean
+  /** Allow writes to shell RC files like .bashrc (default: false) */
+  allowShellRC?: boolean
+  /** Allow writes to .mcp.json (default: false) */
+  allowMCPConfig?: boolean
   /**
    * Directories to emit as `safe.directory` via `GIT_CONFIG_*` env
    * vars — see {@link buildPosixGitSafeDirEnv}.
@@ -96,6 +100,8 @@ export interface MacOSSandboxParams {
  */
 export function macGetMandatoryDenyEntries(
   allowGitConfig = false,
+  allowShellRC = false,
+  allowMCPConfig = false,
 ): PathEntry[] {
   const cwd = normalizePathForSandbox(process.cwd(), { literal: true })
   const entries: PathEntry[] = []
@@ -105,7 +111,7 @@ export function macGetMandatoryDenyEntries(
     anchoredGlobEntry(cwd, pattern)
 
   // Dangerous files - static paths in CWD + glob patterns for subtree
-  for (const fileName of DANGEROUS_FILES) {
+  for (const fileName of getDangerousFiles(allowShellRC, allowMCPConfig)) {
     entries.push(literal(fileName))
     entries.push(beneathCwd(`**/${fileName}`))
   }
@@ -914,6 +920,8 @@ function generateWriteRules(
   config: FsWriteRestrictionConfig | undefined,
   logTag: string,
   allowGitConfig: boolean,
+  allowShellRC: boolean,
+  allowMCPConfig: boolean,
   writeRoots: readonly PathEntry[],
 ): string[] {
   if (!config) {
@@ -935,7 +943,7 @@ function generateWriteRules(
   const denyEntries = [
     ...(config.denyWithinAllow || []).map(toPathEntry),
     ...(config.literalDenyWithinAllow ?? []).map(toLiteralPathEntry),
-    ...macGetMandatoryDenyEntries(allowGitConfig),
+    ...macGetMandatoryDenyEntries(allowGitConfig, allowShellRC, allowMCPConfig),
   ]
   denyEntries.push(...alsoReadAs(config.denyWithinAllow, 'deny'))
 
@@ -991,6 +999,8 @@ function generateSandboxProfile({
   allowMachLookup,
   allowPty,
   allowGitConfig = false,
+  allowShellRC = false,
+  allowMCPConfig = false,
   enableWeakerNetworkIsolation = false,
   allowAppleEvents = false,
   logTag,
@@ -1008,6 +1018,10 @@ function generateSandboxProfile({
   allowMachLookup?: string[]
   allowPty?: boolean
   allowGitConfig?: boolean
+  /** Allow writes to shell RC files like .bashrc (default: false) */
+  allowShellRC?: boolean
+  /** Allow writes to .mcp.json (default: false) */
+  allowMCPConfig?: boolean
   enableWeakerNetworkIsolation?: boolean
   allowAppleEvents?: boolean
   logTag: string
@@ -1297,7 +1311,14 @@ function generateSandboxProfile({
   // Write rules
   profile.push('; File write')
   profile.push(
-    ...generateWriteRules(writeConfig, logTag, allowGitConfig, writeRoots),
+    ...generateWriteRules(
+      writeConfig,
+      logTag,
+      allowGitConfig,
+      allowShellRC,
+      allowMCPConfig,
+      writeRoots,
+    ),
   )
 
   // Read-denied paths inside write roots: the read section's unlink/create
@@ -1367,6 +1388,8 @@ export function wrapCommandWithSandboxMacOS(
     degradeToDenyPaths,
     allowPty,
     allowGitConfig = false,
+    allowShellRC = false,
+    allowMCPConfig = false,
     gitSafeDirectories,
     enableWeakerNetworkIsolation = false,
     allowAppleEvents = false,
@@ -1437,6 +1460,8 @@ export function wrapCommandWithSandboxMacOS(
     allowMachLookup,
     allowPty,
     allowGitConfig,
+    allowShellRC,
+    allowMCPConfig,
     enableWeakerNetworkIsolation,
     allowAppleEvents,
     logTag,

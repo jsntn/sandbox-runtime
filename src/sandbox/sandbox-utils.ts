@@ -28,6 +28,44 @@ export const DANGEROUS_FILES = [
 export const DANGEROUS_DIRECTORIES = ['.git', '.vscode', '.idea'] as const
 
 /**
+ * Shell RC files among DANGEROUS_FILES. Lifted from the mandatory
+ * write denies when `filesystem.allowShellRC: true`.
+ */
+export const SHELL_RC_FILES = [
+  '.bashrc',
+  '.bash_profile',
+  '.zshrc',
+  '.zprofile',
+  '.profile',
+] as const
+
+/**
+ * The MCP server config file, among DANGEROUS_FILES. Lifted from the
+ * mandatory write denies when `filesystem.allowMCPConfig: true`.
+ */
+export const MCP_CONFIG_FILE = '.mcp.json'
+
+/**
+ * Get the dangerous files that remain mandatory write denies given the
+ * allow flags: `allowShellRC` lifts the shell RC files, `allowMCPConfig`
+ * lifts `.mcp.json`. Both default to false, i.e. everything blocked.
+ */
+export function getDangerousFiles(
+  allowShellRC = false,
+  allowMCPConfig = false,
+): string[] {
+  return (DANGEROUS_FILES as readonly string[]).filter(f => {
+    if (allowShellRC && (SHELL_RC_FILES as readonly string[]).includes(f)) {
+      return false
+    }
+    if (allowMCPConfig && f === MCP_CONFIG_FILE) {
+      return false
+    }
+    return true
+  })
+}
+
+/**
  * Get the list of dangerous directories to deny writes to.
  * Excludes .git since we need it writable for git operations -
  * instead we block specific paths within .git (hooks and config).

@@ -760,7 +760,11 @@ async function initialize(
           // them, so the monitor must not judge by them either.
           ...(config.filesystem.disabled
             ? []
-            : linuxGetCwdMandatoryDenyPaths(getAllowGitConfig())),
+            : linuxGetCwdMandatoryDenyPaths(
+                getAllowGitConfig(),
+                getAllowShellRC(),
+                getAllowMCPConfig(),
+              )),
         ],
         ignoreViolations: config.ignoreViolations,
         resolveCommandText,
@@ -1631,6 +1635,14 @@ function getAllowGitConfig(): boolean {
   return config?.filesystem?.allowGitConfig ?? false
 }
 
+function getAllowShellRC(): boolean {
+  return config?.filesystem?.allowShellRC ?? false
+}
+
+function getAllowMCPConfig(): boolean {
+  return config?.filesystem?.allowMCPConfig ?? false
+}
+
 /**
  * Union of session-level and per-call `git.safeDirectories`. Marks
  * paths as `safe.directory` (dubious-ownership bypass) WITHOUT
@@ -1991,6 +2003,8 @@ async function wrapWithSandboxAgain(
         ignoreViolations: getIgnoreViolations(),
         allowPty,
         allowGitConfig: getAllowGitConfig(),
+        allowShellRC: getAllowShellRC(),
+        allowMCPConfig: getAllowMCPConfig(),
         gitSafeDirectories,
         enableWeakerNetworkIsolation: getEnableWeakerNetworkIsolation(),
         allowAppleEvents: getAllowAppleEvents(),
@@ -2030,6 +2044,8 @@ async function wrapWithSandboxAgain(
         ripgrepConfig: getRipgrepConfig(),
         mandatoryDenySearchDepth: getMandatoryDenySearchDepth(),
         allowGitConfig: getAllowGitConfig(),
+        allowShellRC: getAllowShellRC(),
+        allowMCPConfig: getAllowMCPConfig(),
         gitSafeDirectories,
         seccompConfig: getSeccompConfig(),
         bwrapPath: config?.bwrapPath,
