@@ -18,7 +18,7 @@ import {
   isSymlinkOutsideBoundary,
   encodeSandboxedCommand,
   attributionKeyFor,
-  getDangerousFiles,
+  DANGEROUS_FILES,
   isAbsenceErrno,
   isAtOrUnder,
   isStrictlyUnder,
@@ -81,10 +81,6 @@ export interface LinuxSandboxParams {
   mandatoryDenySearchDepth?: number
   /** Allow writes to .git/config files (default: false) */
   allowGitConfig?: boolean
-  /** Allow writes to shell RC files like .bashrc (default: false) */
-  allowShellRC?: boolean
-  /** Allow writes to .mcp.json (default: false) */
-  allowMCPConfig?: boolean
   /**
    * Directories to emit as `safe.directory` via `GIT_CONFIG_*` env
    * vars (see {@link buildPosixGitSafeDirEnv}). Under `--unshare-user`
@@ -287,16 +283,12 @@ function findFirstNonExistentComponent(targetPath: string): string {
  */
 export function linuxGetCwdMandatoryDenyPaths(
   allowGitConfig = false,
-  allowShellRC = false,
-  allowMCPConfig = false,
 ): string[] {
   const cwd = process.cwd()
   // Note: Settings files are added at the callsite in sandbox-manager.ts
   const denyPaths = [
     // Dangerous files in CWD
-    ...getDangerousFiles(allowShellRC, allowMCPConfig).map(f =>
-      path.resolve(cwd, f),
-    ),
+    ...DANGEROUS_FILES.map(f => path.resolve(cwd, f)),
     // Dangerous directories in CWD
     ...getDangerousDirectories().map(d => path.resolve(cwd, d)),
   ]
@@ -399,8 +391,6 @@ async function linuxGetMandatoryDenyPaths(
   ripgrepConfig: RipgrepConfig = { command: 'rg' },
   maxDepth: number = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH,
   allowGitConfig = false,
-  allowShellRC = false,
-  allowMCPConfig = false,
   abortSignal?: AbortSignal,
 ): Promise<string[]> {
   const cwd = process.cwd()
@@ -409,15 +399,11 @@ async function linuxGetMandatoryDenyPaths(
   const signal = abortSignal ?? fallbackController.signal
   const dangerousDirectories = getDangerousDirectories()
 
-  const denyPaths = linuxGetCwdMandatoryDenyPaths(
-    allowGitConfig,
-    allowShellRC,
-    allowMCPConfig,
-  )
+  const denyPaths = linuxGetCwdMandatoryDenyPaths(allowGitConfig)
 
   // Build iglob args for all patterns in one ripgrep call
   const iglobArgs: string[] = []
-  for (const fileName of getDangerousFiles(allowShellRC, allowMCPConfig)) {
+  for (const fileName of DANGEROUS_FILES) {
     iglobArgs.push('--iglob', fileName)
   }
   for (const dirName of dangerousDirectories) {
@@ -1900,8 +1886,6 @@ async function generateFilesystemArgs(
   ripgrepConfig: RipgrepConfig = { command: 'rg' },
   mandatoryDenySearchDepth: number = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH,
   allowGitConfig = false,
-  allowShellRC = false,
-  allowMCPConfig = false,
   abortSignal?: AbortSignal,
 ): Promise<string[]> {
   const args: string[] = []
@@ -2374,8 +2358,6 @@ async function generateFilesystemArgs(
         ripgrepConfig,
         mandatoryDenySearchDepth,
         allowGitConfig,
-        allowShellRC,
-        allowMCPConfig,
         abortSignal,
       )),
     ]
@@ -3255,8 +3237,6 @@ export async function wrapCommandWithSandboxLinux(
     ripgrepConfig = { command: 'rg' },
     mandatoryDenySearchDepth = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH,
     allowGitConfig = false,
-    allowShellRC = false,
-    allowMCPConfig = false,
     gitSafeDirectories,
     seccompConfig,
     bwrapPath,
@@ -3486,8 +3466,6 @@ export async function wrapCommandWithSandboxLinux(
       ripgrepConfig,
       mandatoryDenySearchDepth,
       allowGitConfig,
-      allowShellRC,
-      allowMCPConfig,
       abortSignal,
     )
     const mountsStart = bwrapArgs.length
