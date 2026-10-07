@@ -764,6 +764,8 @@ Filesystem restrictions are enforced at the OS level:
 
 Certain sensitive files and directories are **always blocked from writes**, even if they fall within an allowed write path. This provides defense-in-depth against sandbox escapes and configuration tampering.
 
+Full reference — including `.git`/`.git/HEAD`/worktree specifics, the ripgrep scan internals, and platform asymmetries: [`docs/mandatory-write-denies.md`](docs/mandatory-write-denies.md).
+
 **Always-blocked files:**
 
 - Shell config files: `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`
