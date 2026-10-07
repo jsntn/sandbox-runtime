@@ -67,7 +67,7 @@ function isValidDomainPattern(val: string): boolean {
 }
 
 const DOMAIN_PATTERN_MESSAGE =
-  'Invalid domain pattern. Must be a valid domain (e.g., "example.com"), a wildcard (e.g., "*.example.com"), or a bracketed IPv6 literal (e.g., "[::1]", "[2001:db8::1]:443"). Overly broad patterns like "*.com" or "*" are not allowed for security reasons.'
+  'Invalid domain pattern. Must be a valid domain (e.g., "example.com"), a wildcard (e.g., "*.example.com"), or a bracketed IPv6 literal (e.g., "[::1]", "[2001:db8::1]:443"). Overly broad patterns like "*.com" are not allowed for security reasons.'
 
 /**
  * Schema for domain patterns (e.g., "example.com", "*.npmjs.org")
@@ -77,11 +77,6 @@ const domainPatternSchema = z
   .string()
   .refine(isValidDomainPattern, { message: DOMAIN_PATTERN_MESSAGE })
 
-/**
- * Domain pattern with an optional `:port` suffix (e.g., "example.com:443",
- * "*.npmjs.org:8443"). Used for allowedDomains / deniedDomains, where the
- * proxy knows the destination port; an entry without a port matches any port.
- */
 /**
  * Raw-entry rule applied before the port split: an entry with two or more
  * colons is an IPv6 literal and must use RFC 3986 brackets (`[::1]`,
@@ -95,24 +90,16 @@ function hasValidIpv6Bracketing(val: string): boolean {
   return !multiColon || val.startsWith('[')
 }
 
-const domainPortPatternSchema = z
-  .string()
-  .refine(
-    val =>
-      hasValidIpv6Bracketing(val) &&
-      isValidDomainPattern(splitDomainPatternPort(val).hostPattern),
-    {
-      message:
-        DOMAIN_PATTERN_MESSAGE +
-        ' An optional ":port" suffix (1-65535) restricts the entry to that port.',
-    },
-  )
-
 /**
- * deniedDomains entry: a domainPortPattern, or a bare "*" / "*:port"
- * (deny-all, optionally per-port).
+ * Domain pattern entry with an optional `:port` suffix (e.g.
+ * "example.com:443", "*.npmjs.org:8443"), used by both allowedDomains and
+ * deniedDomains, where the proxy knows the destination port; an entry
+ * without a port matches any port. A bare "*" (or "*:port") is accepted and
+ * matches every host — allow-all in allowedDomains (full internet access),
+ * deny-all in deniedDomains. The same entry stays rejected in injectHosts /
+ * excludeDomains, where a wildcard host has no defined coverage check.
  */
-const deniedDomainPatternSchema = z.string().refine(
+const domainPortPatternSchema = z.string().refine(
   val => {
     if (!hasValidIpv6Bracketing(val)) return false
     const { hostPattern } = splitDomainPatternPort(val)
@@ -121,7 +108,7 @@ const deniedDomainPatternSchema = z.string().refine(
   {
     message:
       DOMAIN_PATTERN_MESSAGE +
-      ' In deniedDomains a bare "*" (deny-all) is also accepted, and an optional ":port" suffix (1-65535) restricts the entry to that port.',
+      ' A bare "*" (allow-all / deny-all) is also accepted, and an optional ":port" suffix (1-65535) restricts the entry to that port.',
   },
 )
 
@@ -744,10 +731,11 @@ export const NetworkConfigSchema = z.object({
     .array(domainPortPatternSchema)
     .describe(
       'List of allowed domains (e.g., ["github.com", "*.npmjs.org", "api.example.com:443"]). ' +
-        'An optional ":port" suffix restricts the entry to that destination port.',
+        'A bare "*" allows every host (full internet access); an optional ":port" suffix ' +
+        'restricts the entry to that destination port.',
     ),
   deniedDomains: z
-    .array(deniedDomainPatternSchema)
+    .array(domainPortPatternSchema)
     .describe(
       'List of denied domains. Unlike allowedDomains, a bare "*" is accepted here (deny-all). ' +
         'An optional ":port" suffix (e.g., "*:22") restricts the entry to that destination port.',

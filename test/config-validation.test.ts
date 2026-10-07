@@ -132,6 +132,18 @@ describe('Config Validation', () => {
   test('should validate wildcard domains correctly', () => {
     const validWildcards = ['*.example.com', '*.github.io', '*.co.uk']
 
+    // A bare "*" (allow-all) is a distinct, explicitly-permitted entry:
+    // it lets the sandbox reach every host. It is validated by the
+    // allowedDomains schema (not the strict domainPatternSchema used for
+    // injectHosts / excludeDomains, where it stays rejected).
+    for (const domain of ['*', '*:80', '*:443']) {
+      const result = SandboxRuntimeConfigSchema.safeParse({
+        network: { allowedDomains: [domain], deniedDomains: [] },
+        filesystem: { denyRead: [], allowWrite: [], denyWrite: [] },
+      })
+      expect(result.success).toBe(true)
+    }
+
     const invalidWildcards = [
       '*example.com', // Missing dot after asterisk
       '*.com', // No subdomain
@@ -167,6 +179,7 @@ describe('Config Validation', () => {
       'localhost:3000',
       'example.com:65535',
       'example.com:1',
+      '*:22', // bare "*" (allow-all) is now accepted in allowedDomains
     ]
     for (const domain of valid) {
       const result = SandboxRuntimeConfigSchema.safeParse({
@@ -190,7 +203,6 @@ describe('Config Validation', () => {
       'example.com:abc',
       'example.com:80:443',
       'example.com:', // empty suffix
-      '*:22', // "*" is deny-only, still rejected in allowedDomains
       '::1', // IPv6 literals must be bracketed
       'fd00:ec2::254',
       '2001:db8::1:443', // ambiguous — is 443 a port or the last hextet?
